@@ -216,3 +216,22 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# TIM_2026 local runtime artifacts
+/artifacts/
+/checkpoints/
+/results/
+/output/
+*.pt
+*.pth
+*.ckpt
+
+# Datasets stay external; keep only the placement guide.
+/data/
+/datasets/*
+!/datasets/README.md
+
+# Local editor and OS metadata
+.idea/
+.vscode/
+.DS_Store
