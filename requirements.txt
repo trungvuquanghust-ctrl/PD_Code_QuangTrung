@@ -20,6 +20,7 @@ thop>=0.1.1
 # Visualization used by confusion matrices, t-SNE plots and feature maps
 matplotlib>=3.7,<3.11
 seaborn>=0.12,<0.14
+PyWavelets>=1.4,<2
 
 # DeepEMD OpenCV backend. The code also has linprog/sinkhorn fallbacks.
 opencv-python-headless>=4.10,<4.13

@@ -1,38 +1,60 @@
-# Dataset placement
+# Dataset placement and generation
 
-The dataset itself is not distributed with TIM_2026.
+TIM_2026 does not distribute raw signals, extracted pulses, or scalograms.
+Keep large data outside Git and pass its path explicitly.
 
-For the simplest project-local setup, place or link it here:
+## Generate scalograms from raw MAT signals
+
+From the repository root:
+
+```powershell
+python prepare_data.py `
+  --input "C:\path\to\PD_data_27_1_mat" `
+  --output "D:\prepared\pd_27_1" `
+  --workers 4
+```
+
+The training-ready path is:
 
 ```text
-TIM_2026/
-└── datasets/
-    └── scalogram_27_1/
-        ├── train/
-        ├── val/
-        └── test/
+D:\prepared\pd_27_1\scalograms
 ```
 
-Each split must contain the four class folders:
+Use it directly:
+
+```powershell
+python pect.py `
+  --dataset-path "D:\prepared\pd_27_1\scalograms" `
+  --shot 1 `
+  --training-samples 60 `
+  --gpu 0
+```
+
+See the main [`README.md`](../README.md) for the raw MAT layout, pulse/CWT
+settings, visualization commands, and diagnostics.
+
+## Use an already prepared dataset
+
+The required structure is:
 
 ```text
-surface/
-internal/
-corona/
-notpd/
+scalograms/
+├── train/
+│   ├── surface/*.png
+│   ├── internal/*.png
+│   ├── corona/*.png
+│   └── notpd/*.png
+├── val/
+│   └── <same four classes>/*.png
+└── test/
+    └── <same four classes>/*.png
 ```
 
-Then run from the project root:
+The folder may be anywhere:
 
 ```bash
-bash scripts/train_pect.sh datasets/scalogram_27_1 1 60 0
+python pect.py --dataset-path /mnt/datasets/pd_27_1/scalograms --shot 1
 ```
 
-The data may also remain anywhere outside the repository, including a mounted
-server volume. In that case, pass its path explicitly:
-
-```bash
-bash scripts/train_pect.sh /mnt/datasets/scalogram_27_1 1 60 0
-```
-
-Do not commit images, generated splits, or checkpoints to this repository.
+Alternatively, place or link it at `datasets/scalogram_27_1/` and pass that
+relative path. Do not commit generated images, MAT files, or checkpoints.

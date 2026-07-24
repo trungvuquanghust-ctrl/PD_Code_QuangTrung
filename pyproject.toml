@@ -12,7 +12,7 @@ license = {file = "LICENSE"}
 # requirements.txt is the single dependency source for this release.
 
 [tool.setuptools.packages.find]
-include = ["tim_2026*"]
+include = ["tim_2026*", "data_pipeline*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

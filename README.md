@@ -1,234 +1,225 @@
-# TIM_2026: PECT for Few-Shot Partial-Discharge Classification
+# TIM_2026 — PECT for few-shot partial-discharge classification
 
-This repository is the clean, standalone implementation of **PECT** used in the
-TIM 2026 experimental pipeline. It contains one model only: the paper-facing
-PECT configuration built from a ResNet12 backbone, local unbalanced optimal
-transport (UOT), threshold-mass scoring, and a global residual classifier with
-weight `0.1`.
-
-The training protocol and model hyperparameters are preserved from the research
-code. W&B, historical outputs, unrelated models, exploratory diagnostics, and
-UOT evidence figures are intentionally excluded. The release retains only
-essential TXT/CSV metrics, a confusion matrix, and a t-SNE figure.
-
-## Method at a glance
-
-For each few-shot episode, PECT follows:
+This repository contains the standalone PECT model and a complete data flow:
 
 ```text
-scalogram -> ResNet12 spatial tokens -> projected local descriptors
-           -> class/query UOT matching -> threshold-mass local score
-           -> + 0.1 * global prototype residual -> class logits
+raw .mat signal
+  -> pulse detection and extraction
+  -> leakage-safe train/val/test split
+  -> CWT scalogram PNG
+  -> PECT training and final test
 ```
 
-The local class score uses the transported mass and cost produced by UOT. The
-global head is a residual correction, not a replacement for local transport in
-the canonical configuration.
+No dataset is bundled. You always pass explicit input and output paths, so the
+same commands work with a local folder, an external disk, or a mounted server
+volume.
 
-## Repository layout
+## 1. Install
 
-```text
-TIM_2026/
-├── pect.py                     # canonical PECT train/test entry point
-├── run_ablations.py            # clean runner for the 14 PECT ablations
-├── tim_2026/
-│   ├── config.py               # typed paper protocol and model configuration
-│   ├── ablations.py            # one-factor ablation definitions
-│   ├── data/
-│   │   ├── loading.py          # unchanged image loading/normalization semantics
-│   │   ├── episodic.py         # deterministic N-way K-shot sampler
-│   │   └── pipeline.py         # tensor preparation and balanced subsets
-│   ├── engine/runner.py        # train, validation, checkpoint, and final test
-│   ├── model/
-│   │   ├── pect.py             # small paper-facing PECT builder
-│   │   └── _reference/         # exact numerical PECT/OT implementation
-│   ├── logging.py              # TXT/CSV-only experiment logging
-│   └── visualization.py        # confusion matrix and t-SNE only
-├── tests/                      # protocol, model, sampler, and ablation tests
-└── docs/                       # architecture and reproducibility notes
+Python 3.10 or newer is recommended.
+
+### Windows PowerShell
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-## Installation
-
-Python 3.10+ and a CUDA-enabled PyTorch installation are recommended.
+### Linux or Git Bash
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-`requirements.txt` is copied byte-for-byte from the workspace's canonical
-`requirements_scalogram.txt`. That shared environment file still lists W&B for
-compatibility with the wider workspace, but TIM_2026 contains no W&B imports,
-initialization, or logging calls.
-
-On Windows PowerShell, activate with:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-## Dataset layout
-
-No dataset is included and there is no machine-specific default path.
-`--dataset-path` is always required.
-
-The easiest setup is to place or symlink the dataset at
-`datasets/scalogram_27_1/`. The dataset can also remain anywhere outside the
-repository; simply pass that directory to Python or the Bash launcher. See
-[`datasets/README.md`](datasets/README.md) for placement examples.
-
-The required pre-split layout is:
-
-```text
-scalogram_27_1/
-├── train/
-│   ├── surface/
-│   ├── internal/
-│   ├── corona/
-│   └── notpd/
-├── val/
-│   └── <same four classes>/
-└── test/
-    └── <same four classes>/
-```
-
-Images are converted to RGB, resized to `84 x 84`, and normalized using channel
-statistics computed from the training split only. The canonical class order is
-`surface`, `internal`, `corona`, `notpd`.
-
-## Canonical PECT experiment
-
-Train and run the final test:
+Quick installation check:
 
 ```bash
-python pect.py \
-  --dataset-path datasets/scalogram_27_1 \
-  --dataset-name knee_aug_split \
-  --shot 1 \
-  --training-samples 60 \
+python prepare_data.py --help
+python pect.py --help
+```
+
+## 2. Prepare the dataset from raw MAT signals
+
+The raw input must contain these three folders:
+
+```text
+PD_data_27_1_mat/
+├── surface/*.mat
+├── internal/*.mat
+└── corona/*.mat
+```
+
+Supported MAT keys are:
+
+- raw signals: `Voltage` and `Time`;
+- legacy/extracted signals: `Trace_3_VOLT` and `Time_s`.
+
+Run the complete flow with one command:
+
+```powershell
+python prepare_data.py `
+  --input "C:\path\to\PD_data_27_1_mat" `
+  --output "D:\prepared\pd_27_1" `
+  --workers 4
+```
+
+Linux/Git Bash:
+
+```bash
+python prepare_data.py \
+  --input /data/PD_data_27_1_mat \
+  --output /data/prepared/pd_27_1 \
+  --workers 4
+```
+
+`--output` must be a new or empty folder. This prevents a rerun from silently
+mixing stale MAT/PNG files with newly generated data.
+
+The output is:
+
+```text
+pd_27_1/
+├── pulses_flat/                 # extracted pulse MAT files + provenance
+├── pulses/
+│   ├── train/<class>/*.mat
+│   ├── val/<class>/*.mat
+│   └── test/<class>/*.mat
+├── scalograms/                  # pass this folder to --dataset-path
+│   ├── train/<class>/*.png
+│   ├── val/<class>/*.png
+│   └── test/<class>/*.png
+├── visualizations/
+│   ├── raw_signals/             # green-gradient full signals
+│   └── pulses/                  # green-gradient extracted pulses
+└── diagnostics/
+    ├── extraction_diagnostics.csv
+    ├── extraction_errors.csv
+    ├── scalogram_diagnostics.csv
+    ├── scalogram_errors.csv
+    └── pipeline_summary.json
+```
+
+The four output classes are `surface`, `internal`, `corona`, and `notpd`.
+`notpd` windows are mined from high-frequency, PD-spectrum-similar background
+regions that do not contain a dominant spike.
+
+### What the preparation code preserves
+
+Pulse extraction follows the workspace implementation:
+
+- sampling rate: `200 MHz`;
+- pulse window: `1280` samples (`6.4 us`);
+- peak position: `1.25 us` (`250` samples);
+- local prominence plus knee threshold;
+- knee sensitivity: `0.4`;
+- prominence median floor: `2.8`;
+- minimum pulse SNR: `7.8`;
+- internal-class multi-peak rejection.
+
+Scalogram generation also preserves the original settings:
+
+- Complex Morlet `cmor1.5-1.0`;
+- `200` log-spaced scales;
+- `1–16.5 MHz`;
+- `abs(CWT) -> log1p(200*x) -> per-image min-max normalization`;
+- `inferno` colormap and `224 x 224` PNG.
+
+The split is deterministic (`--seed 42`) and groups samples by raw source file.
+Therefore, pulses extracted from one raw recording cannot appear in more than
+one of train, validation, and test.
+
+### Fast smoke test
+
+Before processing every raw file:
+
+```powershell
+python prepare_data.py `
+  --input "C:\path\to\PD_data_27_1_mat" `
+  --output "D:\prepared\pd_27_1_smoke" `
+  --limit-files-per-class 1 `
+  --visualize-limit-per-class 1 `
+  --workers 1
+```
+
+The smoke-test split may not contain all four classes in every split because it
+uses only one source recording per class. Use the full dataset for training.
+
+### Visualization only
+
+Render raw signals:
+
+```powershell
+python visualize_data.py `
+  --kind raw `
+  --input "C:\path\to\PD_data_27_1_mat" `
+  --output "D:\viz\raw" `
+  --limit-per-class 5
+```
+
+Render extracted pulses:
+
+```powershell
+python visualize_data.py `
+  --kind pulse `
+  --input "D:\prepared\pd_27_1\pulses" `
+  --output "D:\viz\pulses" `
+  --limit-per-class 5 `
+  --show-peak-position
+```
+
+Both commands use the same amplitude-weighted green `Greens` gradient as the
+dataset workspace scripts and write PNG, PDF, and `file_mapping.csv`.
+
+## 3. Train canonical PECT
+
+Use the generated `scalograms` folder:
+
+```powershell
+python pect.py `
+  --dataset-path "D:\prepared\pd_27_1\scalograms" `
+  --dataset-name pd_27_1 `
+  --shot 1 `
+  --training-samples 60 `
   --gpu 0
 ```
 
-Use all available training samples by omitting `--training-samples`. For the
-5-shot protocol, pass `--shot 5`.
+For 5-shot, change `--shot 1` to `--shot 5`. To use all training images, omit
+`--training-samples`.
 
-Test an existing checkpoint:
+Inspect the resolved configuration without training:
 
-```bash
-python pect.py \
-  --mode test \
-  --weights artifacts/<run-name>/checkpoints/best.pt \
-  --dataset-path datasets/scalogram_27_1 \
-  --shot 1
-```
-
-Inspect the resolved configuration without loading data or training:
-
-```bash
-python pect.py --dataset-path datasets/scalogram_27_1 --dry-run
-```
-
-## Bash launchers
-
-The `scripts/` directory provides strict Bash wrappers that work from any
-current directory and automatically use `.venv/bin/python` when available.
-
-Create the environment:
-
-```bash
-bash scripts/setup.sh
-```
-
-Train canonical PECT (`DATASET_PATH`, `SHOT`, `SAMPLES`, `GPU`):
-
-```bash
-bash scripts/train_pect.sh datasets/scalogram_27_1 1 60 0
-bash scripts/train_pect.sh datasets/scalogram_27_1 5 all 1
-```
-
-Test a checkpoint:
-
-```bash
-bash scripts/test_pect.sh \
-  datasets/scalogram_27_1 \
-  artifacts/<run-name>/checkpoints/best.pt \
-  1 0
-```
-
-Run or inspect ablations:
-
-```bash
-bash scripts/run_ablations.sh \
-  datasets/scalogram_27_1 0 \
-  pect_no_global,pect_cost_only \
-  60,240 1,5 42 --dry-run
-```
-
-Optional environment variables are `PYTHON_BIN`, `DATASET_NAME`, `OUTPUT_DIR`,
-`NUM_WORKERS`, `FINAL_TEST_SEED`, and `RUN_NAME` (train/test only). Any trailing
-arguments are forwarded to the underlying Python entry point.
-
-## Fixed paper protocol
-
-| Setting | Value |
-|---|---:|
-| Classes | 4-way |
-| Shots | 1 or 5 |
-| Queries per class | 1 train / 1 val / 1 test |
-| Input | RGB, 84 x 84 |
-| Backbone | ResNet12 |
-| Token dimension | 128 |
-| Epochs | 100 |
-| Episodes | 130 train / 150 val / 150 test |
-| Optimizer | AdamW |
-| Learning rate | 5e-4 |
-| Weight decay | 5e-4 |
-| Scheduler | 5-epoch linear warmup + cosine |
-| Minimum LR | 1e-6 |
-| Augmentation | Off |
-| Label smoothing | 0.0 |
-| UOT rho | 0.8 |
-| UOT tau_q / tau_c | 0.5 / 0.5 |
-| Global residual | residual mode, weight 0.1 |
-| Default train seed | 42 |
-| Final-test episode seed | 200042 |
-
-Validation episodes use seed `100042 + epoch`, matching the wrapper protocol
-in the source repository.
-
-## Ablation suite
-
-Print the full plan without launching jobs:
-
-```bash
-python run_ablations.py \
-  --dataset-path datasets/scalogram_27_1 \
+```powershell
+python pect.py `
+  --dataset-path "D:\prepared\pd_27_1\scalograms" `
   --dry-run
 ```
 
-Run a focused subset:
+Test an existing checkpoint:
 
-```bash
-python run_ablations.py \
-  --dataset-path datasets/scalogram_27_1 \
-  --variants pect_no_global,pect_cost_only,pect_full_ot \
-  --samples 60,240 \
-  --shots 1,5 \
-  --seeds 42 \
-  --gpu 0
+```powershell
+python pect.py `
+  --mode test `
+  --weights "artifacts\<run-name>\checkpoints\best.pt" `
+  --dataset-path "D:\prepared\pd_27_1\scalograms" `
+  --shot 1
 ```
 
-The runner contains the same 14 configurations as the original PECT suite:
-no-global; global weights `0.05/0.1/0.15/0.2`; global-only; rho
-`0.6/0.7/0.9`; latent-rho; full OT; partial OT; class-pooled; and cost-only.
-The default cross product is `14 variants x 4 sample settings x 2 shots`.
+Linux/Git Bash launchers are also available:
 
-## Outputs
+```bash
+bash scripts/train_pect.sh /data/prepared/pd_27_1/scalograms 1 60 0
+bash scripts/test_pect.sh /data/prepared/pd_27_1/scalograms \
+  artifacts/<run-name>/checkpoints/best.pt 1 0
+```
 
-Each run writes to one self-contained directory:
+## 4. Outputs and debugging
+
+Each experiment writes:
 
 ```text
 artifacts/<run-name>/
@@ -241,26 +232,51 @@ artifacts/<run-name>/
 └── checkpoints/best.pt
 ```
 
-`metrics.txt` and `metrics.csv` contain only essential evaluation information:
-test loss, episode accuracy mean/std/95% CI, query accuracy, macro
-precision/recall/F1, inference time, and parameter count. A compact
-`artifacts/summary.csv` accumulates one row per run.
+Do not judge preprocessing only from final accuracy:
 
-## Reproducibility checks
+- `extraction_diagnostics.csv` reports candidates, accepted peaks, rejection
+  counts, knee thresholds, and `notpd` selection per raw file;
+- `pulse_manifest.csv` maps every pulse to its raw recording;
+- `split_manifest.csv` records the split group and seed and allows a direct
+  leakage audit;
+- `scalogram_diagnostics.csv` reports CWT/log/normalization statistics for every
+  output image;
+- green-gradient raw and pulse plots allow visual inspection before training.
+
+## 5. PECT architecture and novelty boundary
+
+PECT is not presented as “UOT alone.” Its standalone architecture is the
+episode-level combination of:
+
+1. ResNet12 spatial tokens;
+2. learned local-token projection;
+3. class/query unbalanced optimal transport;
+4. threshold-mass local scoring;
+5. a small global-prototype residual with weight `0.1`.
+
+The repository includes 14 controlled ablations to test whether those pieces
+are effective beyond final accuracy: no-global/global-only, global-weight
+sweep, fixed/latent rho, full/partial OT, class-pooled matching, and cost-only
+scoring.
+
+This is the code-level contribution boundary relative to a standard global
+prototype baseline and simpler local-matching variants. It is not, by itself, a
+claim that each component is new in the entire literature; a paper-level
+novelty claim still requires a current literature review. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## 6. Reproduce and verify
 
 ```bash
 python -m pytest
 python -m compileall -q .
 ```
 
-The model-parity test locks the canonical parameter count and constructor
-contract. See [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) for the exact
-equivalence boundary.
+Canonical training settings are ResNet12, 4-way 1/5-shot, 100 epochs,
+130/150/150 train/validation/test episodes, AdamW with learning rate and weight
+decay `5e-4`, UOT `rho=0.8`, `tau_q=tau_c=0.5`, train seed `42`, and final-test
+episode seed `200042`.
 
-## Scope
-
-This repository does not include baseline implementations, datasets,
-checkpoints, old results, W&B integration, transport audit logs, failure-probe
-reports, or UOT matching visualizations. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the standalone PECT boundary
-and its distinction from standard global/prototype and local-matching baselines.
+See [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md) for the exact model
+parity boundary and [`datasets/README.md`](datasets/README.md) for external
+dataset placement.
