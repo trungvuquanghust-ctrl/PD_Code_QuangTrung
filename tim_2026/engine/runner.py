@@ -194,11 +194,23 @@ def _train(
     config: ExperimentConfig,
     device: torch.device,
 ) -> tuple[Path, list[dict[str, object]]]:
-    optimizer = AdamW(
-        model.parameters(),
-        lr=config.learning_rate,
-        weight_decay=config.weight_decay,
-    )
+    
+    decay_params = []
+    no_decay_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if param.ndim <= 1 or name.endswith(".dt") or name.endswith(".A") or name.endswith(".D"):
+            no_decay_params.append(param)
+        else:
+            decay_params.append(param)
+            
+    optim_groups = [
+        {"params": decay_params, "weight_decay": config.weight_decay},
+        {"params": no_decay_params, "weight_decay": 0.0}
+    ]
+    optimizer = AdamW(optim_groups, lr=config.learning_rate)
+    
     scheduler = _build_scheduler(optimizer, config)
     history: list[dict[str, object]] = []
     best_accuracy = -math.inf
@@ -207,7 +219,6 @@ def _train(
 
     for epoch in range(1, config.num_epochs + 1):
         train_seed = config.runtime.seed + epoch
-        # Source runner resolves this to 100042 + epoch for every training seed.
         val_seed = (
             config.runtime.selection_seed_offset
             + config.runtime.selection_base_seed
