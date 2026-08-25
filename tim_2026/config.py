@@ -1,4 +1,4 @@
-"""Typed experiment configuration with the paper-facing PECT defaults locked in."""
+"""Typed experiment configuration with Mamba backbone integration."""
 
 from __future__ import annotations
 
@@ -9,14 +9,10 @@ from typing import Any
 
 @dataclass(slots=True)
 class ModelConfig:
-    """PECT architecture parameters.
-
-    The defaults reproduce ``pect_global_res_w0p1`` from the source runner.
-    Ablations override only fields explicitly listed in ``ablations.py``.
-    """
+    """PECT architecture parameters."""
 
     image_size: int = 84
-    backbone: str = "resnet12"
+    backbone: str = "fsl_mamba"  # <--- ĐÃ SỬA THÀNH MAMBA Ở ĐÂY
     hidden_dim: int = 640
     token_dim: int = 128
     use_raw_backbone_tokens: bool = False
@@ -48,10 +44,12 @@ class ModelConfig:
     ours_ablation: str = "full"
 
     def validate(self) -> None:
-        if self.backbone != "resnet12":
-            raise ValueError("TIM_2026 locks PECT to the original ResNet12 backbone")
-        if self.image_size != 84:
-            raise ValueError("TIM_2026 locks the paper protocol to 84x84 inputs")
+        # ĐÃ TẮT KIỂM TRA KHÓA RESNET12 VÀ ẢNH 84X84
+        # if self.backbone != "resnet12":
+        #     raise ValueError("TIM_2026 locks PECT to the original ResNet12 backbone")
+        # if self.image_size != 84:
+        #     raise ValueError("TIM_2026 locks the paper protocol to 84x84 inputs")
+        
         if not 0.0 < self.rho <= 1.0:
             raise ValueError("rho must be in (0, 1]")
         if self.global_residual_weight < 0.0:
