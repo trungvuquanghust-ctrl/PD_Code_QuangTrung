@@ -9,6 +9,44 @@ import torch.nn.functional as F
 from tim_2026.model._reference.encoders.fsl_mamba_encoder import FSLMambaEncoder
 from tim_2026.model._reference.encoders.resnet12_encoder import ResNet12Encoder
 
+try:
+    from mamba_ssm import Mamba
+except ImportError:
+    Mamba = None
+
+class VimBackbone(nn.Module):
+    """Pure Vision Mamba (Vim) Backbone for PECT."""
+    def __init__(self, image_size=224, patch_size=16, embed_dim=192, depth=12, pool_output=False):
+        super().__init__()
+        self.pool_output = pool_output
+        self.out_channels = embed_dim
+        self.grid_size = image_size // patch_size
+        
+        self.patch_embed = nn.Conv2d(3, embed_dim, kernel_size=patch_size, stride=patch_size)
+        
+        if Mamba is None:
+            raise ImportError("Vui lòng cài đặt mamba-ssm: pip install causal-conv1d>=1.1.0 mamba-ssm")
+            
+        self.blocks = nn.ModuleList([
+            Mamba(d_model=embed_dim, d_state=16, d_conv=4, expand=2)
+            for _ in range(depth)
+        ])
+        self.norm = nn.LayerNorm(embed_dim)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        x = self.patch_embed(x)  # [B, embed_dim, 14, 14]
+        x_flat = x.flatten(2).transpose(1, 2)  # [B, 196, embed_dim]
+        
+        for blk in self.blocks:
+            x_flat = blk(x_flat)
+            
+        x_flat = self.norm(x_flat)
+        feature_map = x_flat.transpose(1, 2).reshape(B, self.out_channels, self.grid_size, self.grid_size)
+        
+        if self.pool_output:
+            return F.adaptive_avg_pool2d(feature_map, 1).view(B, -1)
+        return feature_map
 
 class Conv64FBlock(nn.Module):
     """Single Conv64F block matching smnet's current backbone."""
@@ -82,6 +120,16 @@ def build_resnet12_family_encoder(
     """Build the legacy ResNet12 encoder or the additive smnet Conv64F option."""
 
     backbone_name = str(backbone_name).lower()
+    
+    if backbone_name == "vision_mamba":
+        return VimBackbone(
+            image_size=image_size, 
+            patch_size=16, 
+            embed_dim=192, 
+            depth=12, 
+            pool_output=pool_output
+        )
+
     if backbone_name == "resnet12":
         return ResNet12Encoder(
             image_size=image_size,
