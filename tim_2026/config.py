@@ -6,6 +6,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Backbones that must keep the original paper protocol (locked to 84x84 inputs).
+_LEGACY_PROTOCOL_BACKBONES = {"resnet12", "conv64f", "fsl_mamba", "slim_mamba"}
+# Backbones that patchify the input and therefore only require image_size to be
+# divisible by their patch size, not fixed at 84x84.
+_PATCH_BACKBONES = {"vision_mamba"}
+_VISION_MAMBA_PATCH_SIZE = 16
+
+SUPPORTED_BACKBONES = _LEGACY_PROTOCOL_BACKBONES | _PATCH_BACKBONES
+
 
 @dataclass(slots=True)
 class ModelConfig:
@@ -13,7 +22,11 @@ class ModelConfig:
 
     image_size: int = 224
     backbone: str = "vision_mamba"
-    hidden_dim: int = 640
+    # NOTE: 192 matches VimBackbone's default embed_dim. This avoids a lossy
+    # 192->640 up-projection adapter that fewshot_common.py would otherwise
+    # insert automatically. If you switch backbone back to "resnet12", also
+    # set hidden_dim=640 (the original paper-protocol value) and image_size=84.
+    hidden_dim: int = 192
     token_dim: int = 128
     use_raw_backbone_tokens: bool = False
 
@@ -44,6 +57,27 @@ class ModelConfig:
     ours_ablation: str = "full"
 
     def validate(self) -> None:
+        backbone = str(self.backbone).lower()
+        if backbone not in SUPPORTED_BACKBONES:
+            raise ValueError(
+                f"Unsupported backbone: {self.backbone!r}. "
+                f"Expected one of {sorted(SUPPORTED_BACKBONES)}"
+            )
+        self.backbone = backbone
+
+        if backbone in _LEGACY_PROTOCOL_BACKBONES and self.image_size != 84:
+            raise ValueError(
+                f"backbone={backbone!r} reproduces the original TIM_2026 paper "
+                "protocol, which is locked to 84x84 inputs. Use "
+                "backbone='vision_mamba' if you need a different resolution."
+            )
+        if backbone in _PATCH_BACKBONES and self.image_size % _VISION_MAMBA_PATCH_SIZE != 0:
+            raise ValueError(
+                f"backbone={backbone!r} uses patch_size={_VISION_MAMBA_PATCH_SIZE}; "
+                f"image_size must be divisible by {_VISION_MAMBA_PATCH_SIZE}, "
+                f"got {self.image_size}"
+            )
+
         if not 0.0 < self.rho <= 1.0:
             raise ValueError("rho must be in (0, 1]")
         if self.global_residual_weight < 0.0:
