@@ -161,6 +161,39 @@ def _build_scheduler(optimizer: AdamW, config: ExperimentConfig):
     )
 
 
+# Substrings that identify Mamba SSM state parameters (mamba_ssm's real
+# parameter names: "A_log", "D", "dt_proj.weight", "dt_proj.bias"). These,
+# together with every 1-D parameter (biases, norm weights), should not get
+# weight decay -- decaying the SSM state/discretization parameters tends to
+# destabilize training.
+_NO_DECAY_NAME_HINTS = ("a_log", "dt_proj", ".d", "_d_")
+
+
+def _is_no_decay_param(name: str, param: torch.Tensor) -> bool:
+    if param.ndim <= 1:
+        return True
+    lowered = name.lower()
+    return any(hint in lowered for hint in _NO_DECAY_NAME_HINTS)
+
+
+def _build_optimizer(model: torch.nn.Module, config: ExperimentConfig) -> AdamW:
+    decay_params = []
+    no_decay_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if _is_no_decay_param(name, param):
+            no_decay_params.append(param)
+        else:
+            decay_params.append(param)
+
+    optim_groups = [
+        {"params": decay_params, "weight_decay": config.weight_decay},
+        {"params": no_decay_params, "weight_decay": 0.0},
+    ]
+    return AdamW(optim_groups, lr=config.learning_rate)
+
+
 @torch.no_grad()
 def _evaluate_loader(
     model: torch.nn.Module,
@@ -194,23 +227,7 @@ def _train(
     config: ExperimentConfig,
     device: torch.device,
 ) -> tuple[Path, list[dict[str, object]]]:
-    
-    decay_params = []
-    no_decay_params = []
-    for name, param in model.named_parameters():
-        if not param.requires_grad:
-            continue
-        if param.ndim <= 1 or name.endswith(".dt") or name.endswith(".A") or name.endswith(".D"):
-            no_decay_params.append(param)
-        else:
-            decay_params.append(param)
-            
-    optim_groups = [
-        {"params": decay_params, "weight_decay": config.weight_decay},
-        {"params": no_decay_params, "weight_decay": 0.0}
-    ]
-    optimizer = AdamW(optim_groups, lr=config.learning_rate)
-    
+    optimizer = _build_optimizer(model, config)
     scheduler = _build_scheduler(optimizer, config)
     history: list[dict[str, object]] = []
     best_accuracy = -math.inf
