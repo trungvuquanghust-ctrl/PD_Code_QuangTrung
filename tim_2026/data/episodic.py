@@ -33,7 +33,7 @@ class FewshotDataset(Dataset):
         self.augment = bool(augment)
         self.return_indices = bool(return_indices)
 
-        self.hard_pool = {}
+         self.hard_pool = {}
         if hard_pool is not None:
             for class_id in range(self.way_num):
                 indices = hard_pool.get(class_id, [])
@@ -43,7 +43,7 @@ class FewshotDataset(Dataset):
                     indices = torch.tensor(list(indices), dtype=torch.long)
                 self.hard_pool[class_id] = indices
 
-             default_aug = {
+        default_aug = {
             "time_shift_max": 12,
             "time_shift_prob": 0.5,
             "amp_scale_min": 0.9,
