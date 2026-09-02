@@ -16,11 +16,9 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
 from tim_2026.config import ExperimentConfig
 from tim_2026.data import DatasetBundle, FewshotDataset, load_dataset_bundle
 from tim_2026.logging import append_summary, write_csv, write_key_values
-from tim_2026.model import build_pect
 from tim_2026.runtime import configure_runtime
 from tim_2026.visualization import save_confusion_matrix, save_tsne
 
