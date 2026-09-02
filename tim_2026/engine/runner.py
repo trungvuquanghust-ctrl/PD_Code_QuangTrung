@@ -1,4 +1,4 @@
-"""Compact train/validation/test pipeline for PECT."""
+
 
 from __future__ import annotations
 
@@ -239,8 +239,7 @@ def _train(
         val_seed = (
             config.runtime.selection_seed_offset
             + config.runtime.selection_base_seed
-            + epoch
-        )
+        )  # co dinh qua moi epoch de loai nhieu do doi episode validation
         train_dataset = _episode_dataset(
             bundle.train_images,
             bundle.train_labels,
@@ -489,12 +488,17 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         f"global={config.model.global_residual_mode}@{config.model.global_residual_weight}"
     )
 
+    subset_seed = (
+        config.runtime.training_subset_seed
+        if config.runtime.training_subset_seed is not None
+        else config.runtime.seed
+    )
     bundle = load_dataset_bundle(
         config.dataset_path,
         image_size=config.model.image_size,
         training_samples=config.training_samples,
         way_num=config.way_num,
-        seed=config.runtime.seed,
+        seed=subset_seed,
     )
     model = build_pect(config.model).to(device)
     parameters = sum(parameter.numel() for parameter in model.parameters())
