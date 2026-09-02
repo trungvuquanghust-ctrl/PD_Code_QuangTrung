@@ -88,7 +88,7 @@ class ModelConfig:
 class RuntimeConfig:
     seed: int = 42
     final_test_seed: int = 200042
-    training_subset_seed: int | None = None  # None = dùng chung với "seed" (hành vi cũ)
+    training_subset_seed: int | None = None  # None = dung chung voi "seed" (hanh vi cu)
     selection_base_seed: int = 42
     selection_seed_offset: int = 100000
     gpu_id: int = 0
