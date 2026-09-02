@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmup-epochs", "--warmup_epochs", type=int, default=5)
     parser.add_argument("--min-lr", "--min_lr", type=float, default=1e-6)
 
-    # --- Cac flag nay chua ton tai trong ban goc, them vao vi ExperimentConfig
+    # Cac flag nay chua ton tai trong ban goc, them vao vi ExperimentConfig
     # (config.py) da co san field train_augment / label_smoothing / grad_clip
     # nhung cli.py chua truyen duoc gia tri cho chung.
     parser.add_argument(
