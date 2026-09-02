@@ -1,4 +1,4 @@
-
+"""Compact train/validation/test pipeline for PECT."""
 
 from __future__ import annotations
 
@@ -488,6 +488,9 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         f"global={config.model.global_residual_mode}@{config.model.global_residual_weight}"
     )
 
+    # Cho phep tach rieng seed chon subset anh khoi seed huan luyen model,
+    # de do dung "do on dinh" khi chay nhieu seed (khong lan giua 2 nguon
+    # bien thien: data-sampling vs training/optimization).
     subset_seed = (
         config.runtime.training_subset_seed
         if config.runtime.training_subset_seed is not None
