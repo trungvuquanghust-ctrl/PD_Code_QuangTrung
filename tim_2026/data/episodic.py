@@ -43,15 +43,15 @@ class FewshotDataset(Dataset):
                     indices = torch.tensor(list(indices), dtype=torch.long)
                 self.hard_pool[class_id] = indices
 
-        default_aug = {
-            "time_shift_max": 4,
+             default_aug = {
+            "time_shift_max": 12,
             "time_shift_prob": 0.5,
             "amp_scale_min": 0.9,
             "amp_scale_max": 1.1,
             "amp_scale_prob": 0.5,
-            "time_mask_width": 4,
+            "time_mask_width": 12,
             "time_mask_prob": 0.25,
-            "freq_mask_width": 4,
+            "freq_mask_width": 12,
             "freq_mask_prob": 0.25,
         }
         self.augment_cfg = default_aug
