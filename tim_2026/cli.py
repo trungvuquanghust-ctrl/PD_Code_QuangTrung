@@ -39,7 +39,39 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmup-epochs", "--warmup_epochs", type=int, default=5)
     parser.add_argument("--min-lr", "--min_lr", type=float, default=1e-6)
 
+    # --- Cac flag nay chua ton tai trong ban goc, them vao vi ExperimentConfig
+    # (config.py) da co san field train_augment / label_smoothing / grad_clip
+    # nhung cli.py chua truyen duoc gia tri cho chung.
+    parser.add_argument(
+        "--train-augment",
+        "--train_augment",
+        action="store_true",
+        help="Enable episodic data augmentation during training",
+    )
+    parser.add_argument(
+        "--label-smoothing",
+        "--label_smoothing",
+        type=float,
+        default=0.0,
+        help="Cross-entropy label smoothing factor",
+    )
+    parser.add_argument(
+        "--grad-clip",
+        "--grad_clip",
+        type=float,
+        default=0.0,
+        help="Max gradient norm for clipping (0 disables clipping)",
+    )
+
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--training-subset-seed",
+        "--training_subset_seed",
+        type=int,
+        default=None,
+        help="Seed for picking the --training-samples subset, independent of "
+             "--seed (model init/training). Defaults to --seed if unset.",
+    )
     parser.add_argument("--final-test-seed", "--final_test_seed", type=int, default=200042)
     parser.add_argument("--gpu", "--gpu-id", "--gpu_id", type=int, default=0)
     parser.add_argument("--num-workers", "--num_workers", type=int, default=8)
@@ -83,11 +115,15 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         weight_decay=args.weight_decay,
         warmup_epochs=args.warmup_epochs,
         min_learning_rate=args.min_lr,
+        train_augment=args.train_augment,
+        label_smoothing=args.label_smoothing,
+        grad_clip=args.grad_clip,
         save_confusion_matrix=not args.no_confusion_matrix,
         save_tsne=not args.no_tsne,
         model=model,
         runtime=RuntimeConfig(
             seed=args.seed,
+            training_subset_seed=args.training_subset_seed,
             final_test_seed=args.final_test_seed,
             gpu_id=args.gpu,
             num_workers=args.num_workers,
