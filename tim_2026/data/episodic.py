@@ -33,7 +33,7 @@ class FewshotDataset(Dataset):
         self.augment = bool(augment)
         self.return_indices = bool(return_indices)
 
-         self.hard_pool = {}
+        self.hard_pool = {}
         if hard_pool is not None:
             for class_id in range(self.way_num):
                 indices = hard_pool.get(class_id, [])
